@@ -53,6 +53,10 @@ try {
         $extRows = $stmt_ext->fetchAll(PDO::FETCH_KEY_PAIR);
         
         foreach ($categories as &$cat) {
+            // Decode HTML entities stored in DB (from htmlspecialchars on input)
+            if (isset($cat['name'])) {
+                $cat['name'] = html_entity_decode($cat['name'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            }
             $key = 'category_ext_' . $cat['id'];
             $cat['short_description'] = '';
             $cat['structure_type'] = 'single';

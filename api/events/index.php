@@ -45,6 +45,10 @@ try {
         // Group categories by event_id
         $groupedCats = [];
         foreach ($categories as $cat) {
+            // Decode HTML entities stored in DB (from htmlspecialchars on input)
+            if (isset($cat['name'])) {
+                $cat['name'] = html_entity_decode($cat['name'], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            }
             $groupedCats[$cat['event_id']][] = $cat;
         }
         
