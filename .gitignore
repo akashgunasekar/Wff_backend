@@ -1,0 +1,26 @@
+# Secrets / environment
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# Test / diagnostic files
+test_*.php
+check_*.php
+
+# Local Composer executable
+composer.phar
+
+# macOS / editor
+.DS_Store
+.vscode/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Test files anywhere in the project
+**/test_*
+**/check_*

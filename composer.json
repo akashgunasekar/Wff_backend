@@ -1,0 +1,6 @@
+{
+    "require": {
+        "razorpay/razorpay": "^2.9",
+        "phpoffice/phpspreadsheet": "^5.9"
+    }
+}
