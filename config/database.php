@@ -18,7 +18,11 @@ class Database {
             $this->conn->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
         } catch(PDOException $exception) {
             error_log("Connection error: " . $exception->getMessage());
-            die(json_encode(["success" => false, "message" => "Database connection failed."]));
+            die(json_encode([
+                "success" => false, 
+                "message" => "Database connection failed.",
+                "error" => $exception->getMessage()
+            ]));
         }
         return $this->conn;
     }
