@@ -18,6 +18,10 @@ class Database {
             $this->conn->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);
         } catch(PDOException $exception) {
             error_log("Connection error: " . $exception->getMessage());
+            http_response_code(500);
+            if (!headers_sent()) {
+                header('Content-Type: application/json; charset=UTF-8');
+            }
             die(json_encode([
                 "success" => false, 
                 "message" => "Database connection failed.",

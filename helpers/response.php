@@ -9,6 +9,12 @@ function sendResponse($success, $data = null, $message = null, $statusCode = 200
         if ($message !== null) $response['message'] = $message;
     }
     
-    echo json_encode($response);
+    $json = json_encode($response);
+    if ($json === false) {
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'JSON Encode Error: ' . json_last_error_msg()]);
+    } else {
+        echo $json;
+    }
     exit;
 }
