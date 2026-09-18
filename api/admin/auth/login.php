@@ -9,34 +9,9 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     sendResponse(false, null, "Method not allowed.", 405);
 }
 
-// IP-based Rate Limiting (mitigates rapid brute-force)
-// Use real client IP behind reverse proxy / CDN / load balancer
-$ip = $_SERVER['REMOTE_ADDR'];
-if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
-    // X-Forwarded-For can contain multiple IPs: client, proxy1, proxy2
-    $forwardedIps = explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']);
-    $ip = trim($forwardedIps[0]);
-} elseif (!empty($_SERVER['HTTP_X_REAL_IP'])) {
-    $ip = trim($_SERVER['HTTP_X_REAL_IP']);
-} elseif (!empty($_SERVER['HTTP_CF_CONNECTING_IP'])) {
-    $ip = trim($_SERVER['HTTP_CF_CONNECTING_IP']);
-}
-
 try {
     $database = new Database();
     $db = $database->getConnection();
-    
-    // Clean up old LOGIN attempts only (older than 2 mins)
-    // Don't delete RATE_LIMIT_REG or RATE_LIMIT_PAY entries — those have their own cleanup
-    $db->exec("DELETE FROM login_attempts WHERE attempt_time < NOW() - INTERVAL 2 MINUTE AND email_attempt NOT LIKE 'RATE_LIMIT_%'");
-    
-    // Only count login-specific attempts (exclude registration/payment rate limit entries)
-    $stmt = $db->prepare("SELECT COUNT(*) FROM login_attempts WHERE ip_address = ? AND email_attempt NOT LIKE 'RATE_LIMIT_%'");
-    $stmt->execute([$ip]);
-    if ($stmt->fetchColumn() >= 10) {
-        sendResponse(false, null, "Too many failed attempts. Please try again in 2 minutes.", 429);
-        exit;
-    }
 
     $data = json_decode(file_get_contents("php://input"), true);
     if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
@@ -50,24 +25,14 @@ try {
     $email = sanitizeInput($data['email']);
     $password = $data['password'];
     
-    // Constant time delay to hinder timing attacks
-    usleep(500000); // 0.5s delay
-    
     $stmt = $db->prepare("SELECT id, name, email, password_hash, role, is_active FROM admins WHERE email = ? LIMIT 1");
     $stmt->execute([$email]);
     $admin = $stmt->fetch();
     
     if (!$admin || !password_verify($password, $admin['password_hash']) || !(bool)$admin['is_active']) {
-        $insert = $db->prepare("INSERT INTO login_attempts (ip_address, email_attempt) VALUES (?, ?)");
-        $insert->execute([$ip, $email]);
-        
         sendResponse(false, null, "Invalid email or password.", 401);
         exit;
     }
-    
-    // Success - Reset login attempts only (preserve RATE_LIMIT_REG / RATE_LIMIT_PAY entries)
-    $del = $db->prepare("DELETE FROM login_attempts WHERE ip_address = ? AND email_attempt NOT LIKE 'RATE_LIMIT_%'");
-    $del->execute([$ip]);
     
     // Prevent Session Fixation
     session_regenerate_id(true);
