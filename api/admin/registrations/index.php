@@ -100,6 +100,24 @@ try {
     $stmt->execute($params);
     $registrations = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+    foreach ($registrations as &$reg) {
+        $metaStmt = $db->prepare("SELECT setting_value FROM site_settings WHERE setting_key = ?");
+        $metaStmt->execute(["registration_{$reg['id']}_meta"]);
+        $metaJson = $metaStmt->fetchColumn();
+        $reg['payment_proof'] = null;
+        $reg['transaction_ref'] = null;
+        if ($metaJson) {
+            $meta = json_decode($metaJson, true);
+            if (isset($meta['payment_proof'])) {
+                $reg['payment_proof'] = $meta['payment_proof'];
+            }
+            if (isset($meta['transaction_ref'])) {
+                $reg['transaction_ref'] = $meta['transaction_ref'];
+            }
+        }
+    }
+    unset($reg);
+
     sendResponse(true, [
         'registrations' => $registrations,
         'pagination' => [

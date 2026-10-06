@@ -61,6 +61,9 @@ try {
         if (isset($meta['height'])) $registration['height'] = $meta['height'];
         if (isset($meta['weight'])) $registration['weight'] = $meta['weight'];
         if (isset($meta['instagram_id'])) $registration['instagram_id'] = $meta['instagram_id'];
+        if (isset($meta['payment_proof'])) $registration['payment_proof'] = $meta['payment_proof'];
+        if (isset($meta['transaction_ref'])) $registration['transaction_ref'] = $meta['transaction_ref'];
+        if (isset($meta['proof_uploaded_at'])) $registration['proof_uploaded_at'] = $meta['proof_uploaded_at'];
     }
 
     // Get payments history
