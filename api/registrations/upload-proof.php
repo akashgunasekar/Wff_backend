@@ -125,12 +125,16 @@ try {
 
     $db->commit();
 
+    // Send Stage Pass to Registered Email
+    require_once __DIR__ . '/../../helpers/email.php';
+    sendAthletePassEmail($regNumber, $db);
+
     sendResponse(true, [
         "registration_number" => $regNumber,
         "status" => "paid",
         "payment_proof" => $publicPath,
         "transaction_ref" => $transactionRef,
-        "message" => "Payment screenshot uploaded and verified successfully."
+        "message" => "Payment screenshot uploaded, verified, and pass sent to email."
     ]);
 
 } catch (Exception $e) {

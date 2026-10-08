@@ -106,6 +106,9 @@ try {
                     if ($payment['reg_status'] === 'payment_pending') {
                         $updateReg = $db->prepare("UPDATE registrations SET status = 'paid' WHERE id = ?");
                         $updateReg->execute([$payment['registration_id']]);
+                        
+                        require_once __DIR__ . '/../../helpers/email.php';
+                        sendAthletePassEmail($payment['registration_id'], $db);
                     }
                     
                     error_log("Webhook Success: Payment captured successfully for Order $order_id");

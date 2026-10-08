@@ -98,9 +98,13 @@ try {
     $updateReg->execute([$payment['registration_id']]);
     
     $db->commit();
+
+    // Send Stage Pass to Registered Email
+    require_once __DIR__ . '/../../helpers/email.php';
+    sendAthletePassEmail($reg_number, $db);
     
     sendResponse(true, [
-        "message" => "Payment verified successfully.",
+        "message" => "Payment verified successfully and pass sent to email.",
         "registration_number" => $reg_number,
         "status" => "captured"
     ]);
