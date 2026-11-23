@@ -38,12 +38,13 @@ try {
     $metaStmt->execute(["registration_{$registration['id']}_meta"]);
     $metaJson = $metaStmt->fetchColumn();
     
+    // Initialize defaults from row or fallback
     $registration['categories'] = [$registration['category_name']];
-    $registration['total_amount'] = $registration['entry_fee'] ? (int)$registration['entry_fee'] : 0;
+    $registration['total_amount'] = (int)($registration['total_amount'] ?: $registration['entry_fee'] ?: 0);
     $registration['tan_spray_requested'] = false;
-    $registration['height'] = null;
-    $registration['weight'] = null;
-    $registration['instagram_id'] = null;
+    $registration['rejection_reason'] = null;
+    $registration['approved_at'] = null;
+    $registration['pricing'] = null;
     
     if ($metaJson) {
         $meta = json_decode($metaJson, true);
@@ -55,15 +56,21 @@ try {
         if (isset($meta['pricing']['final_total'])) {
             $registration['total_amount'] = $meta['pricing']['final_total'];
         }
+        if (isset($meta['pricing'])) {
+            $registration['pricing'] = $meta['pricing'];
+        }
         if (isset($meta['tan_spray_requested'])) {
             $registration['tan_spray_requested'] = $meta['tan_spray_requested'];
         }
-        if (isset($meta['height'])) $registration['height'] = $meta['height'];
-        if (isset($meta['weight'])) $registration['weight'] = $meta['weight'];
+        if (isset($meta['height']) && !empty($meta['height'])) $registration['height'] = $meta['height'];
+        if (isset($meta['age']) && !empty($meta['age'])) $registration['age'] = $meta['age'];
+        if (isset($meta['weight']) && !empty($meta['weight'])) $registration['weight'] = $meta['weight'];
         if (isset($meta['instagram_id'])) $registration['instagram_id'] = $meta['instagram_id'];
         if (isset($meta['payment_proof'])) $registration['payment_proof'] = $meta['payment_proof'];
         if (isset($meta['transaction_ref'])) $registration['transaction_ref'] = $meta['transaction_ref'];
         if (isset($meta['proof_uploaded_at'])) $registration['proof_uploaded_at'] = $meta['proof_uploaded_at'];
+        if (isset($meta['rejection_reason'])) $registration['rejection_reason'] = $meta['rejection_reason'];
+        if (isset($meta['approved_at'])) $registration['approved_at'] = $meta['approved_at'];
     }
 
     // Get payments history

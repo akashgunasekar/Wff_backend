@@ -29,14 +29,20 @@ try {
         $safeValue = trim((string)$value);
         
         // Validation
-        if ($safeKey === 'contact_email' && !empty($safeValue)) {
+        if (($safeKey === 'contact_email' || $safeKey === 'smtp_from_email') && !empty($safeValue)) {
             if (!validateEmail($safeValue)) {
-                sendResponse(false, null, "Invalid email address format.", 422);
+                sendResponse(false, null, "Invalid email address format for $safeKey.", 422);
             }
         }
         if ($safeKey === 'phone' && !empty($safeValue)) {
             if (!validatePhone($safeValue)) {
                 sendResponse(false, null, "Invalid phone number format.", 422);
+            }
+        }
+        if ($safeKey === 'smtp_port' && !empty($safeValue)) {
+            $port = (int)$safeValue;
+            if ($port < 1 || $port > 65535) {
+                sendResponse(false, null, "Invalid SMTP port number.", 422);
             }
         }
         $urlKeys = ['facebook_url', 'instagram_url', 'youtube_url', 'website_url', 'contact_map_url'];
@@ -47,7 +53,14 @@ try {
             }
         }
         
-        $safeValue = sanitizeInput($safeValue);
+        // If password is sent as empty string or unchanged placeholder, don't overwrite existing
+        if ($safeKey === 'smtp_pass' && ($safeValue === '' || $safeValue === '••••••••')) {
+            continue;
+        }
+
+        if ($safeKey !== 'smtp_pass') {
+            $safeValue = sanitizeInput($safeValue);
+        }
         
         $stmt = $db->prepare("INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?");
         $stmt->execute([$safeKey, $safeValue, $safeValue]);

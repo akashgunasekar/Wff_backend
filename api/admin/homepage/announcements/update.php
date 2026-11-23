@@ -21,14 +21,15 @@ $id = (int)$data['id'];
 $message = sanitizeInput($data['message']);
 $link_text = sanitizeInput($data['link_text'] ?? '');
 $link_url = sanitizeInput($data['link_url'] ?? '');
+$sort_order = isset($data['sort_order']) ? (int)$data['sort_order'] : 0;
 $status = isset($data['status']) ? (int)$data['status'] : 1;
 
 try {
     $database = new Database();
     $db = $database->getConnection();
     
-    $stmt = $db->prepare("UPDATE announcements SET message = ?, link_text = ?, link_url = ?, status = ? WHERE id = ?");
-    $stmt->execute([$message, $link_text, $link_url, $status, $id]);
+    $stmt = $db->prepare("UPDATE announcements SET message = ?, link_text = ?, link_url = ?, sort_order = ?, status = ? WHERE id = ?");
+    $stmt->execute([$message, $link_text, $link_url, $sort_order, $status, $id]);
     
     logAdminAction($db, $admin['id'], 'ANNOUNCEMENT_UPDATED', "Updated announcement ID: {$id}", null, null, $_SERVER['REMOTE_ADDR']);
     

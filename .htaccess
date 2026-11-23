@@ -1,0 +1,29 @@
+# ==============================================================================
+# WFF TAMIL NADU BACKEND — PRODUCTION APACHE / LITESPEED / CPANEL CONFIGURATION
+# ==============================================================================
+
+# 1. Disable Directory Browsing
+Options -Indexes -MultiViews
+
+# 2. Block Direct Access to Sensitive Files and Directories
+<FilesMatch "^(\.env|\.git|\.gitignore|env|composer\.(json|lock)|README\.md|CLAUDE\.md|AGENTS\.md|.*\.log|.*\.sql|.*\.sh)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Block access to hidden directories (.git, .vscode, etc.)
+RewriteEngine On
+RewriteRule (^|/)\.(?!well-known) - [F]
+
+# 3. Handle File Routing
+# If the exact file exists, serve it (for /uploads/...)
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# If .php file exists, rewrite cleanly
+RewriteCond %{DOCUMENT_ROOT}/$1.php -f
+RewriteRule ^(.*)$ $1.php [L,QSA]
+
+# Prevent script execution inside uploads directory
+RewriteRule ^uploads/.*\.php$ - [F,L]

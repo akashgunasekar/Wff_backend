@@ -5,10 +5,16 @@ $isHttps = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ||
            (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
 
 // Configure secure session cookie parameters
+$host = $_SERVER['HTTP_HOST'] ?? '';
+$cookieDomain = getenv('COOKIE_DOMAIN') ?: '';
+if (empty($cookieDomain) && strpos($host, 'wfftamilnadu.in') !== false) {
+    $cookieDomain = '.wfftamilnadu.in';
+}
+
 session_set_cookie_params([
     'lifetime' => 86400, // 24 hours
     'path' => '/',
-    'domain' => '',
+    'domain' => $cookieDomain,
     'secure' => $isHttps,
     'httponly' => true,
     'samesite' => $isHttps ? 'None' : 'Lax'

@@ -25,6 +25,17 @@ $event_id = (int)$data['id'];
 $name = sanitizeInput($data['event_name']);
 $slug = sanitizeInput($data['slug']);
 $date = sanitizeInput($data['event_date']);
+$dateType = isset($data['date_type']) && in_array($data['date_type'], ['single', 'multi']) ? $data['date_type'] : 'single';
+$endDate = ($dateType === 'multi' && !empty($data['event_end_date'])) ? sanitizeInput($data['event_end_date']) : null;
+
+if ($dateType === 'multi' && empty($endDate)) {
+    sendResponse(false, null, "Field 'event_end_date' is required for multi-day events.", 422);
+}
+
+if ($dateType === 'multi' && $endDate && $endDate < $date) {
+    sendResponse(false, null, "Event end date cannot be earlier than start date.", 422);
+}
+
 $venue = sanitizeInput($data['venue']);
 $status = sanitizeInput($data['status']);
 $banner = isset($data['banner_image']) ? sanitizeInput($data['banner_image']) : '';
@@ -62,8 +73,8 @@ try {
         sendResponse(false, null, "Another event with this slug already exists.", 409);
     }
     
-    $stmt = $db->prepare("UPDATE events SET event_name = ?, slug = ?, event_date = ?, venue = ?, status = ?, banner_image = ?, description = ? WHERE id = ?");
-    $stmt->execute([$name, $slug, $date, $venue, $dbStatus, $banner, $description, $event_id]);
+    $stmt = $db->prepare("UPDATE events SET event_name = ?, slug = ?, event_date = ?, date_type = ?, event_end_date = ?, venue = ?, status = ?, banner_image = ?, description = ? WHERE id = ?");
+    $stmt->execute([$name, $slug, $date, $dateType, $endDate, $venue, $dbStatus, $banner, $description, $event_id]);
     
     // Update Tan Spray Price
     if (isset($data['tan_spray_price'])) {

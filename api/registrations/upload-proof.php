@@ -8,18 +8,17 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     sendResponse(false, null, "Method not allowed.", 405);
 }
 
-$regNumber = isset($_POST['registration_number']) ? trim($_POST['registration_number']) : '';
+$regNumber = isset($_POST['registration_number']) ? trim($_POST['registration_number']) : (isset($_POST['registration_id']) ? trim($_POST['registration_id']) : '');
 $transactionRef = isset($_POST['transaction_ref']) ? trim($_POST['transaction_ref']) : '';
 
 if (empty($regNumber)) {
-    sendResponse(false, null, "Registration number is required.", 400);
+    sendResponse(false, null, "Registration number or ID is required.", 400);
 }
 
-if (empty($_FILES['screenshot'])) {
+$file = !empty($_FILES['screenshot']) ? $_FILES['screenshot'] : (!empty($_FILES['payment_proof']) ? $_FILES['payment_proof'] : null);
+if (!$file) {
     sendResponse(false, null, "Payment screenshot file is required.", 422);
 }
-
-$file = $_FILES['screenshot'];
 
 if ($file['error'] !== UPLOAD_ERR_OK) {
     sendResponse(false, null, "File upload error: code " . $file['error'], 400);
@@ -94,8 +93,8 @@ try {
 
     $db->beginTransaction();
 
-    // Update registration status to 'paid'
-    $updateStmt = $db->prepare("UPDATE registrations SET status = 'paid' WHERE id = ?");
+    // Set registration status to 'payment_pending' awaiting admin review
+    $updateStmt = $db->prepare("UPDATE registrations SET status = 'payment_pending' WHERE id = ?");
     $updateStmt->execute([$regId]);
 
     // Fetch existing meta
@@ -107,15 +106,19 @@ try {
     $meta['payment_proof'] = $publicPath;
     $meta['transaction_ref'] = $transactionRef ?: null;
     $meta['proof_uploaded_at'] = date('Y-m-d H:i:s');
+    $meta['approval_status'] = 'pending';
+    // Clear any previous rejection reason upon new screenshot upload
+    unset($meta['rejection_reason']);
+    unset($meta['rejected_at']);
 
     $setting_key = "registration_{$regId}_meta";
     $setting_value = json_encode($meta);
     $saveMetaStmt = $db->prepare("INSERT INTO site_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = ?");
     $saveMetaStmt->execute([$setting_key, $setting_value, $setting_value]);
 
-    // Record or update payment in payments table
+    // Record payment in payments table with status 'created' awaiting admin verification
     $totalAmount = isset($meta['pricing']['final_total']) ? $meta['pricing']['final_total'] : 0;
-    $payStmt = $db->prepare("INSERT INTO payments (registration_id, razorpay_order_id, razorpay_payment_id, amount, currency, status, method) VALUES (?, ?, ?, ?, 'INR', 'captured', 'upi_qr')");
+    $payStmt = $db->prepare("INSERT INTO payments (registration_id, razorpay_order_id, razorpay_payment_id, amount, currency, status, method) VALUES (?, ?, ?, ?, 'INR', 'created', 'upi_qr')");
     $payStmt->execute([
         $regId,
         'UPI-PROOF-' . time(),
@@ -125,16 +128,16 @@ try {
 
     $db->commit();
 
-    // Send Stage Pass to Registered Email
+    // Send Registration Submission Acknowledgement Email (Email 1)
     require_once __DIR__ . '/../../helpers/email.php';
-    sendAthletePassEmail($regNumber, $db);
+    sendRegistrationAcknowledgementEmail($regNumber, $db);
 
     sendResponse(true, [
         "registration_number" => $regNumber,
-        "status" => "paid",
+        "status" => "payment_pending",
         "payment_proof" => $publicPath,
         "transaction_ref" => $transactionRef,
-        "message" => "Payment screenshot uploaded, verified, and pass sent to email."
+        "message" => "Payment screenshot uploaded successfully. Pending admin verification."
     ]);
 
 } catch (Exception $e) {

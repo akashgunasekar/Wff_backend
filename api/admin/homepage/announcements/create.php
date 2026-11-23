@@ -20,14 +20,15 @@ if (empty($data['message'])) {
 $message = sanitizeInput($data['message']);
 $link_text = sanitizeInput($data['link_text'] ?? '');
 $link_url = sanitizeInput($data['link_url'] ?? '');
+$sort_order = isset($data['sort_order']) ? (int)$data['sort_order'] : 0;
 $status = isset($data['status']) ? (int)$data['status'] : 1;
 
 try {
     $database = new Database();
     $db = $database->getConnection();
     
-    $stmt = $db->prepare("INSERT INTO announcements (message, link_text, link_url, status) VALUES (?, ?, ?, ?)");
-    $stmt->execute([$message, $link_text, $link_url, $status]);
+    $stmt = $db->prepare("INSERT INTO announcements (message, link_text, link_url, sort_order, status) VALUES (?, ?, ?, ?, ?)");
+    $stmt->execute([$message, $link_text, $link_url, $sort_order, $status]);
     
     logAdminAction($db, $admin['id'], 'ANNOUNCEMENT_CREATED', "Created announcement", null, null, $_SERVER['REMOTE_ADDR']);
     

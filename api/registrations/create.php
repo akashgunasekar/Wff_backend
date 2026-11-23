@@ -15,7 +15,7 @@ if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
 }
 
 // Check new required fields
-$required = ['event_id', 'category_ids', 'athlete_name', 'date_of_birth', 'phone', 'email'];
+$required = ['event_id', 'category_ids', 'athlete_name', 'date_of_birth', 'phone', 'email', 'height'];
 foreach ($required as $field) {
     if (!isset($data[$field]) || (is_string($data[$field]) && trim($data[$field]) === '')) {
         sendResponse(false, null, "Field '{$field}' is required.", 400);
@@ -33,14 +33,24 @@ $athlete_name = sanitizeInput($data['athlete_name']);
 $dob = sanitizeInput($data['date_of_birth']);
 $phone = sanitizeInput($data['phone']);
 $email = sanitizeInput($data['email']);
-$instagram_id = !empty($data['instagram_id']) ? sanitizeInput($data['instagram_id']) : null;
-$height = !empty($data['height']) ? sanitizeInput($data['height']) : null;
-$weight = !empty($data['weight']) ? sanitizeInput($data['weight']) : null;
+$height = is_numeric($data['height']) ? (float)$data['height'] : null;
 $tan_spray_requested = !empty($data['tan_spray_requested']) ? true : false;
 $payment_method = array_key_exists('payment_method', $data) && $data['payment_method'] === 'cash' ? 'cash' : 'online';
 
-// Hardcoded defaults to pass strictly-defined DB schema without ALTER
-$gender = 'Not Specified'; 
+// Auto-calculate age from DOB
+$age = null;
+try {
+    $birthDate = new DateTime($dob);
+    $today = new DateTime();
+    $age = $birthDate->diff($today)->y;
+} catch (Exception $e) {
+    sendResponse(false, null, "Invalid date of birth format.", 400);
+}
+
+// Optional/defaults to pass DB schema
+$gender = !empty($data['gender']) ? sanitizeInput($data['gender']) : 'Not Specified'; 
+$weight = !empty($data['weight']) && is_numeric($data['weight']) ? (float)$data['weight'] : null;
+$instagram_id = !empty($data['instagram_id']) ? sanitizeInput($data['instagram_id']) : null;
 $address = '';
 $city = '';
 $state = '';
@@ -51,10 +61,13 @@ if (!validateDate($dob)) {
     sendResponse(false, null, "Invalid date of birth format (expected YYYY-MM-DD).", 400);
 }
 if (!validatePhone($phone)) {
-    sendResponse(false, null, "Invalid phone number.", 400);
+    sendResponse(false, null, "Invalid mobile number. Please enter a valid 10-digit number.", 400);
 }
 if ($email && !validateEmail($email)) {
-    sendResponse(false, null, "Invalid email address.", 400);
+    sendResponse(false, null, "Invalid email address format.", 400);
+}
+if ($height === null || $height <= 0 || $height > 300) {
+    sendResponse(false, null, "Please enter a valid height in centimetres.", 400);
 }
 
 $ip = $_SERVER['REMOTE_ADDR'];
@@ -102,11 +115,19 @@ try {
     }
 
     // 2. Pricing Engine
+    // Fetch event-specific pricing config from site_settings
+    $stmt = $db->prepare("SELECT setting_value FROM site_settings WHERE setting_key = ?");
+    $stmt->execute(["event_{$event_id}_pricing"]);
+    $pricingJson = $stmt->fetchColumn();
+    $eventPricing = $pricingJson ? json_decode($pricingJson, true) : null;
+
     $base_total = 0;
     $discount_total = 0;
+    $category_fee = 0;
+    $clinical_charge = 0;
     
+    // Verify Category Availability & Existence
     foreach ($category_ids as $index => $cat_id) {
-        // Verify Category
         $stmt = $db->prepare("SELECT id, entry_fee, availability FROM event_categories WHERE id = ? AND event_id = ?");
         $stmt->execute([$cat_id, $event_id]);
         $category = $stmt->fetch();
@@ -135,42 +156,69 @@ try {
         }
     }
 
+    $catCount = count($category_ids);
+
+    // Apply Tiered Pricing if configured for this event (e.g. South India Natural League 2027)
+    if ($eventPricing && isset($eventPricing['pricing_model']) && $eventPricing['pricing_model'] === 'tiered') {
+        $maxCategories = (int)($eventPricing['max_categories'] ?? 3);
+        if ($catCount > $maxCategories) {
+            $db->rollBack();
+            sendResponse(false, null, "Maximum {$maxCategories} categories allowed for this championship. Please review your selection.", 400);
+        }
+
+        if ($catCount === 1) {
+            $category_fee = (int)($eventPricing['single_category'] ?? 3000);
+        } elseif ($catCount === 2) {
+            $category_fee = (int)($eventPricing['double_category'] ?? 5000);
+        } elseif ($catCount === 3) {
+            $category_fee = (int)($eventPricing['triple_category'] ?? 6000);
+        } else {
+            $category_fee = (int)($eventPricing['single_category'] ?? 3000) * $catCount;
+        }
+
+        $clinical_charge = (int)($eventPricing['clinical_testing_charge'] ?? 2000);
+        $base_total = $category_fee;
+        $discount_total = 0;
+        $final_total = $category_fee + $clinical_charge;
+    } else {
+        $category_fee = $base_total - $discount_total;
+        $clinical_charge = 0;
+        $final_total = $category_fee;
+    }
+
     // 3. Tan Spray Rules
     $tan_spray_fee = 0;
     if ($tan_spray_requested) {
-        // Fetch event tan spray price from site_settings (fallback 1000)
         $stmt = $db->prepare("SELECT setting_value FROM site_settings WHERE setting_key = ?");
         $stmt->execute(["event_{$event_id}_tan_spray_price"]);
         $ts_setting = $stmt->fetchColumn();
         $event_tan_spray_price = $ts_setting !== false ? (int)$ts_setting : 1000;
         
-        // Is this the first registration for this athlete (same event + phone)?
         $stmt = $db->prepare("SELECT id FROM registrations WHERE event_id = ? AND phone = ? LIMIT 1");
         $stmt->execute([$event_id, $phone]);
         $existing = $stmt->fetchColumn();
         
         if ($existing) {
-            // Free!
             $tan_spray_fee = 0;
         } else {
             $tan_spray_fee = $event_tan_spray_price;
         }
     }
 
-    $final_total = $base_total - $discount_total + $tan_spray_fee;
+    $final_total += $tan_spray_fee;
 
     // 4. Create Master Registration
     $query = "INSERT INTO registrations (
-        registration_number, event_id, category_id, athlete_name, date_of_birth, 
-        gender, phone, email, address, city, state, emergency_contact_name, emergency_contact_phone, status
+        registration_number, event_id, category_id, athlete_name, date_of_birth, age, height,
+        gender, phone, email, address, city, state, emergency_contact_name, emergency_contact_phone, total_amount, status
     ) VALUES (
-        'TEMP', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'payment_pending'
+        'TEMP', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'payment_pending'
     )";
     
     $stmt = $db->prepare($query);
     $stmt->execute([
-        $event_id, $primary_category_id, $athlete_name, $dob, $gender, $phone, $email, 
-        $address, $city, $state, $emergency_name, $emergency_phone
+        $event_id, $primary_category_id, $athlete_name, $dob, $age, $height,
+        $gender, $phone, $email, $address, $city, $state, $emergency_name, $emergency_phone, $final_total
     ]);
     
     $registration_id = $db->lastInsertId();
@@ -189,6 +237,10 @@ try {
         'weight' => $weight,
         'tan_spray_requested' => $tan_spray_requested,
         'pricing' => [
+            'pricing_model' => ($eventPricing && isset($eventPricing['pricing_model'])) ? $eventPricing['pricing_model'] : 'standard',
+            'category_count' => $catCount,
+            'category_fee' => $category_fee,
+            'clinical_charge' => $clinical_charge,
             'base_total' => $base_total,
             'discount_total' => $discount_total,
             'tan_spray_fee' => $tan_spray_fee,

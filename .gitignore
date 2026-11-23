@@ -2,6 +2,13 @@
 .env
 .env.*
 !.env.example
+env
+
+# Uploads with sensitive payment screenshots or rendered test emails
+uploads/proofs/*
+!uploads/proofs/.gitkeep
+uploads/emails/*
+!uploads/emails/.gitkeep
 
 # Logs
 *.log

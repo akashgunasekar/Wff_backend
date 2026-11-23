@@ -1,6 +1,9 @@
 <?php
 function sanitizeInput($data) {
-    return htmlspecialchars(strip_tags(trim($data)));
+    if (is_string($data)) {
+        return html_entity_decode(strip_tags(trim($data)), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    }
+    return $data;
 }
 
 function validateEmail($email) {
